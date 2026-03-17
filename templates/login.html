@@ -1,28 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Login</title>
+
+<style>
+
+body{
+font-family: Arial;
+background: linear-gradient(120deg,#1d4350,#a43931);
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+}
+
+.box{
+background:white;
+padding:40px;
+border-radius:10px;
+width:300px;
+text-align:center;
+}
+
+input{
+width:100%;
+padding:10px;
+margin:10px 0;
+}
+
+button{
+padding:10px;
+width:100%;
+background:#4CAF50;
+color:white;
+border:none;
+}
+
+</style>
+
 </head>
 
 <body>
+
+<div class="box">
 
 <h2>Login</h2>
 
 <form method="POST">
 
-Username:<br>
-<input type="text" name="username"><br><br>
+<input type="text" name="username" placeholder="Username" required>
 
-Password:<br>
-<input type="password" name="password"><br><br>
+<input type="password" name="password" placeholder="Password" required>
 
-<input type="submit" value="Login">
+<button type="submit">Login</button>
 
 </form>
 
 <br>
 
-<a href="/signup">Create Account</a>
+<a href="/signup">Create account</a>
+
+</div>
 
 </body>
 </html>
