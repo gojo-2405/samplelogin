@@ -1,42 +1,80 @@
 from flask import Flask, render_template, request, redirect, url_for
+import mysql.connector
+import os
 
 app = Flask(__name__)
 
-# temporary user database
-users = {}
+db_host = os.getenv("DB_HOST", "mysql-service")
+db_user = os.getenv("DB_USER", "root")
+db_password = os.getenv("DB_PASSWORD", "root123")
+db_name = os.getenv("DB_NAME", "login_db")
 
-@app.route("/")
+def get_db_connection():
+    return mysql.connector.connect(
+        host=db_host,
+        user=db_user,
+        password=db_password,
+        database=db_name
+    )
+
+def init_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50),
+            password VARCHAR(50)
+        )
+    """)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+init_db()
+
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return redirect('/login')
 
-@app.route("/signup")
+@app.route('/signup', methods=['GET','POST'])
 def signup():
-    return render_template("signup.html")
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
 
-@app.route("/register", methods=["POST"])
-def register():
-    username = request.form["username"]
-    password = request.form["password"]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username,password) VALUES (%s,%s)", (username,password))
+        conn.commit()
+        cursor.close()
+        conn.close()
 
-    if username in users:
-        return "User already exists!"
-    
-    users[username] = password
-    return redirect(url_for("login"))
+        return redirect('/login')
 
-@app.route("/login")
+    return render_template('signup.html')
+
+@app.route('/login', methods=['GET','POST'])
 def login():
-    return render_template("login.html")
+    if request.method == 'POST':
 
-@app.route("/authenticate", methods=["POST"])
-def authenticate():
-    username = request.form["username"]
-    password = request.form["password"]
+        username = request.form['username']
+        password = request.form['password']
 
-    if username in users and users[username] == password:
-        return f"<h1>Welcome {username}!</h1>"
-    else:
-        return "Invalid Login"
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE username=%s AND password=%s",(username,password))
+        user = cursor.fetchone()
 
-if __name__ == "__main__":
-    app.run(debug=True)
+        cursor.close()
+        conn.close()
+
+        if user:
+            return render_template('home.html', username=username)
+        else:
+            return "Invalid Username or Password"
+
+    return render_template('login.html')
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5000)
