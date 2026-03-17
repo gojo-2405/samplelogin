@@ -35,7 +35,7 @@ init_db()
 
 @app.route('/')
 def index():
-    return redirect('/login')
+    return render_template('index.html')
 
 @app.route('/signup', methods=['GET','POST'])
 def signup():
