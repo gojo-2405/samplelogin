@@ -2,61 +2,75 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 import mysql.connector
 import os
 import time
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "secretkey123"
+app.secret_key = "supersecretkey"
 
-# Database configuration (from Kubernetes env variables)
-db_host = os.getenv("DB_HOST", "mysql-service")
-db_user = os.getenv("DB_USER", "root")
-db_password = os.getenv("DB_PASSWORD", "root123")
-db_name = os.getenv("DB_NAME", "login_db")
+# Environment variables (used in Kubernetes)
+DB_HOST = os.getenv("DB_HOST", "mysql-service")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "root123")
+DB_NAME = os.getenv("DB_NAME", "login_db")
 
 
+# ---------------------------
+# Database Connection Retry
+# ---------------------------
 def get_connection():
-    return mysql.connector.connect(
-        host=db_host,
-        user=db_user,
-        password=db_password,
-        database=db_name
-    )
 
-
-# Wait until database is ready
-def init_db():
     while True:
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
-
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users(
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(50) UNIQUE,
-                password VARCHAR(50)
+            conn = mysql.connector.connect(
+                host=DB_HOST,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME
             )
-            """)
 
-            conn.commit()
-            cursor.close()
-            conn.close()
+            return conn
 
-            print("Database ready")
-            break
+        except mysql.connector.Error as err:
 
-        except:
-            print("Waiting for database...")
+            print("Waiting for MySQL database...")
             time.sleep(3)
+
+
+# ---------------------------
+# Initialize Database
+# ---------------------------
+def init_db():
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users(
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE,
+        password VARCHAR(255)
+    )
+    """)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 
 init_db()
 
 
+# ---------------------------
+# Home Page
+# ---------------------------
 @app.route('/')
 def index():
     return render_template("index.html")
 
 
+# ---------------------------
+# Signup
+# ---------------------------
 @app.route('/signup', methods=["GET", "POST"])
 def signup():
 
@@ -65,28 +79,38 @@ def signup():
         username = request.form["username"]
         password = request.form["password"]
 
+        hashed_password = generate_password_hash(password)
+
         conn = get_connection()
         cursor = conn.cursor()
 
         try:
+
             cursor.execute(
                 "INSERT INTO users (username,password) VALUES (%s,%s)",
-                (username, password)
+                (username, hashed_password)
             )
+
             conn.commit()
 
             flash("Account created successfully!", "success")
             return redirect(url_for("login"))
 
-        except:
-            flash("Username already exists", "danger")
+        except mysql.connector.Error:
 
-        cursor.close()
-        conn.close()
+            flash("Username already exists!", "danger")
+
+        finally:
+
+            cursor.close()
+            conn.close()
 
     return render_template("signup.html")
 
 
+# ---------------------------
+# Login
+# ---------------------------
 @app.route('/login', methods=["GET", "POST"])
 def login():
 
@@ -99,28 +123,40 @@ def login():
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT * FROM users WHERE username=%s AND password=%s",
-            (username, password)
+            "SELECT password FROM users WHERE username=%s",
+            (username,)
         )
 
-        user = cursor.fetchone()
+        result = cursor.fetchone()
 
         cursor.close()
         conn.close()
 
-        if user:
+        if result and check_password_hash(result[0], password):
+
             return render_template("home.html", username=username)
 
         else:
+
             flash("Invalid username or password", "danger")
 
     return render_template("login.html")
 
 
+# ---------------------------
+# Logout
+# ---------------------------
 @app.route('/logout')
 def logout():
     return redirect(url_for("login"))
 
 
+# ---------------------------
+# Run App
+# ---------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+
+    app.run(
+        host="0.0.0.0",
+        port=5000
+    )
